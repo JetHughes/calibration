@@ -93,9 +93,13 @@ double calibrateSingle(std::vector<cv::Mat> &images)
     return err;
 }
 
+void calibrateMany() {
+
+}
+
 int main(int argc, char *argv[])
 {
-    std::vector<cv::Mat> images = loadImages("C:/Users/HCIadmin/jet/Calibration/calibration-images/bl/bl_%d.jpg");
+    std::vector<cv::Mat> images = loadImages("C:/Users/HCIadmin/jet/egocentric-vision/calibration-images/bl/bl_%d.jpg");
     std::cout << "loaded images" << std::endl;
 
     calibrateSingle(images);
