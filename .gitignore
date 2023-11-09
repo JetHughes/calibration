@@ -1,5 +1,8 @@
 .vs/
+.vscode/
 out/
 calibration-images/
+new-images1/
 notes.txt
 calibration.txt
+calibrate_old.txt

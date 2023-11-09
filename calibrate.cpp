@@ -1,27 +1,34 @@
 #include <opencv2/opencv.hpp>
 #include <stdio.h>
 
-const int NUM_IMAGES = 30;
-const cv::Size PATTERN_SIZE(9, 6);
-const float SQUARE_WIDTH = 20.0f;  // mm
-const cv::Size IMAGE_SIZE(2592, 1944);
+const int NUM_IMAGES = 28; // Number of images used for intrinsic calibration
+const int EXT_IMG_NUM = 0; // Index of image to use for extrinsic calibration
+const bool PREVIEW_IMAGES = false;
+const bool SHOW_REPROJECTION = false;
 
+// Checkerboard parameters
+const cv::Size PATTERN_SIZE(10, 7); 
+const float SQUARE_WIDTH = 33.5f;  // mm
+
+// cornerSubPix configuration parameters
+cv::TermCriteria TERMCRIT(cv::TermCriteria::COUNT | cv::TermCriteria::EPS, 20, 0.03);
+cv::Size WINSIZE(9, 9), ZERO_ZONE(-1, -1);
 
 void drawCorners(cv::Mat& image, char *fname)
 {
     std::vector<cv::Point2f> corners;
     bool patternWasFound = cv::findChessboardCorners(image, PATTERN_SIZE, corners);
-    if (patternWasFound == false)
+    if (!patternWasFound)
     {
         std::cout << "No pattern found" << std::endl;
         return;
     } 
-    //cv::drawChessboardCorners(image, PATTERN_SIZE, corners, patternWasFound);
-    //cv::imshow(fname, image);
-    //cv::waitKey();
-    //cv::destroyAllWindows();
+    cv::drawChessboardCorners(image, PATTERN_SIZE, corners, patternWasFound);
+    cv::resize(image, image, cv::Size(), 0.5, 0.5);
+    cv::imshow(fname, image);
+    cv::waitKey();
+    cv::destroyAllWindows();
 }
-
 
 std::vector<cv::Mat> loadImages(char *path)
 {
@@ -40,15 +47,16 @@ std::vector<cv::Mat> loadImages(char *path)
         {
             cv::Mat bwImage;
             cv::cvtColor(image, bwImage, cv::COLOR_RGB2GRAY);
-            //image = bwImage;
-            //drawCorners(image, fname);   
+            if (PREVIEW_IMAGES) {
+                image = bwImage;
+                drawCorners(image, fname);   
+            }
             std::cout << "loaded: " << fname << std::endl;
             images.push_back(bwImage);
         }
     }
     return images;
 }
-
 
 void fillCheckerboard(std::vector<cv::Point3f> &checkerboardPattern)
 {
@@ -62,169 +70,130 @@ void fillCheckerboard(std::vector<cv::Point3f> &checkerboardPattern)
     }
 }
 
-
-double calibrate(std::vector<cv::Mat> &images)
+cv::Point2d calibrate(std::vector<cv::Mat> &images, cv::Size size)
 {
     std::vector<double> distCoeffs;
+    std::vector<cv::Mat> tvecs; 
+    std::vector<cv::Mat> rvecs;
     std::vector<std::vector<cv::Point2f>> imagePoints;
     std::vector<std::vector<cv::Point3f>> objectPoints;
     std::vector<cv::Point3f> checkerboardPattern;    
     fillCheckerboard(checkerboardPattern);
-    cv::Mat K;
-    std::vector<cv::Mat> rvecs;
-    std::vector<cv::Mat> tvecs;
 
-    std::cout << "find image and objects points from " << images.size() << " images" << std::endl;
+    //float data[10] = {1,0,0,
+    //                  0,1,0,
+    //                  0,0,1};
+    //cv::Mat K(3, 3, CV_32FC1, &data);
+    cv::Mat K;
+
+    // Find image and object points
+    std::cout << "\nfind image and objects points from " << images.size() << " images";
     for (const auto &image : images)
     {
         std::vector<cv::Point2f> corners;
         cv::findChessboardCorners(image, PATTERN_SIZE, corners);
+        cv::cornerSubPix(image, corners, WINSIZE, ZERO_ZONE, TERMCRIT);
         printf(".");
         imagePoints.push_back(corners);
         objectPoints.push_back(checkerboardPattern);
     }
     
-    std::cout << "start calibration" << std::endl;
-    double err = cv::calibrateCamera(objectPoints, imagePoints, IMAGE_SIZE, K, distCoeffs, rvecs, tvecs);
-
-    std::cout << "done" << std::endl;
-    std::cout << "\nCamera matrix\n"
-              << K << std::endl;
-    std::cout << "\nError: " << err << std::endl;
-    return err;
-}
-
-
-void calibrateTwo(std::vector<cv::Mat>& images_A, std::vector<cv::Mat>& images_B) {
-    std::cout << "start stero cailbration" << std::endl;
-
-    cv::Mat K_A;
-    cv::Mat K_B;
-
-    std::vector<double> distCoeffs_A;
-    std::vector<double> distCoeffs_B;
-
-    std::vector<std::vector<cv::Point2f>> imagePoints_A;
-    std::vector<std::vector<cv::Point2f>> imagePoints_B;
-
-    std::vector<std::vector<cv::Point3f>> objectPoints;
-
-    std::vector<cv::Point3f> checkerboardPattern;
-    fillCheckerboard(checkerboardPattern);
-
-    std::vector<cv::Mat> rvecs_A;
-    std::vector<cv::Mat> tvecs_A;
-
-    std::vector<cv::Mat> rvecs_B;
-    std::vector<cv::Mat> tvecs_B;
-
-    std::cout << "find image and objects points from A: " << images_A.size() << " images";
-    for (const auto& image : images_A)
-    {
-        std::vector<cv::Point2f> corners;
-        cv::findChessboardCorners(image, PATTERN_SIZE, corners);
-        printf(".");
-        imagePoints_A.push_back(corners);
-        objectPoints.push_back(checkerboardPattern);
-    }
-
-    std::cout << "\nfind image and objects points from B: " << images_B.size() << " images";
-    for (const auto& image : images_B)
-    {
-        std::vector<cv::Point2f> corners;
-        cv::findChessboardCorners(image, PATTERN_SIZE, corners);
-        // cv::cornerSubPix(image, corners, IMAGE_SIZE, );
-        printf(".");
-        imagePoints_B.push_back(corners);
-        //objectPoints.push_back(checkerboardPattern);
-    }
+    //Calibrate
+    std::cout << "\nCalibrate" << std::endl;
+    double err = cv::calibrateCamera(objectPoints, imagePoints, size, K, distCoeffs, rvecs, tvecs);
+    cv::Mat tvec = tvecs[EXT_IMG_NUM]; // Choose one image for extrinsic
+    cv::Mat rvec = rvecs[EXT_IMG_NUM];
+    std::cout << "Error: " << err << std::endl;
+    std::cout << "tvec" << tvec << std::endl;
+    std::cout << "rvec" << rvec << std::endl;
+    std::cout << "k" << K << std::endl;
 
 
-    std::cout << "\ncalibrate A" << std::endl;
-    double err1 = cv::calibrateCamera(objectPoints, imagePoints_A, IMAGE_SIZE, K_A, distCoeffs_A, rvecs_A, tvecs_A);
+    // -----Visually Check Calibration by reprojecting object points onto image-----
+    if (SHOW_REPROJECTION) {
+        // Reproject points
+        cv::Mat extImg_gray = images[EXT_IMG_NUM].clone();
+        cv::Mat extImg(extImg_gray.size(), CV_8UC3); // add colour channel to draw projected points as red dots
+        cv::cvtColor(extImg_gray, extImg, cv::COLOR_GRAY2BGR);
 
-    std::cout << "calibrate B" << std::endl;
-    double err2 = cv::calibrateCamera(objectPoints, imagePoints_B, IMAGE_SIZE, K_B, distCoeffs_B, rvecs_B, tvecs_B);
-
-    cv::Mat R, T, E, F;
-
-    std::cout << "calibrate Stereo" << std::endl;
-    double err = cv::stereoCalibrate(objectPoints, imagePoints_A, imagePoints_B, K_A, distCoeffs_A, K_B, distCoeffs_B, IMAGE_SIZE, R, T, E, F);
-
-    std::cout << "Results:" <<std::endl;
-    std::cout << "\nR" << R << std::endl;
-    std::cout << "\nT" << T << std::endl;
-    std::cout << "\nE" << E << std::endl;
-    std::cout << "\nF" << F << std::endl;
-    std::cout << "\nError: " << err <<std::endl;
-}
-
-
-void calibrateMany(std::vector<std::vector<cv::Mat>> cameras) 
-{
-    std::vector<cv::Mat> K(cameras.size());
-    std::vector<std::vector<double>> distCoeffs(cameras.size());
-    std::vector<std::vector<std::vector<cv::Point2f>>> imagePoints(cameras.size());
-    std::vector<std::vector<cv::Mat>> tvecs(cameras.size());
-    std::vector<std::vector<cv::Mat>> rvecs(cameras.size());
-
-    std::vector<std::vector<cv::Point3f>> objectPoints;
-    std::vector<cv::Point3f> checkerboardPattern;
-    fillCheckerboard(checkerboardPattern);
-
-    std::cout << "\ncalibrating with " << cameras[0].size() << " images" << std::endl;
-    for (size_t i = 0; i < cameras.size(); ++i) {
-        std::cout << "\nfind image points for camera " << i;
-        for (const auto& image : cameras[i])
-        {
-            std::vector<cv::Point2f> corners;
-            cv::findChessboardCorners(image, PATTERN_SIZE, corners);
-            printf(".");
-            imagePoints[i].push_back(corners);
-
-            // Get object points only from the first camera
-            if (i == 0) {
-                objectPoints.push_back(checkerboardPattern);
-            }
+        std::vector<cv::Point2f> projectedPoints;
+        cv::projectPoints(objectPoints[EXT_IMG_NUM], rvec, tvec, K, distCoeffs, projectedPoints);
+        for (const cv::Point2f& point : projectedPoints) {
+            cv::circle(extImg, point, 2, cv::Scalar(0, 0, 255), -1); // Red circle
         }
-        std::cout << "calibrate camera " << i << std::endl;
-        double err1 = cv::calibrateCamera(objectPoints, imagePoints[i], IMAGE_SIZE, K[i], distCoeffs[i], rvecs[i], tvecs[i]);
+        cv::resize(extImg, extImg, cv::Size(), 0.5, 0.5);
+        cv::imshow("original image with reprojected points", extImg);
 
-        if (i != 0) {
+        // Undistort image
+        cv::Mat undistortedImg(extImg.size(), CV_8UC3);
+        cv::undistort(extImg, undistortedImg, K, distCoeffs);
+        cv::imshow("undistorted image with reprojected points", undistortedImg);
 
-            cv::Mat R, T, E, F;
-            std::cout << "Stereo calibrate 0 with " << i << std::endl;
-            double err = cv::stereoCalibrate(objectPoints, imagePoints[0], imagePoints[i], K[0], distCoeffs[0], K[i], distCoeffs[i], IMAGE_SIZE, R, T, E, F);
-
-            std::cout << "Results:" << std::endl;
-            std::cout << "R" << R << std::endl;
-            std::cout << "T" << T << std::endl;
-            std::cout << "E" << E << std::endl;
-            std::cout << "F" << F << std::endl;
-            std::cout << "Error: " << err << std::endl;
-        }
+        cv::waitKey(0);
+        cv::destroyAllWindows();
     }
 
-
-
+    // return the x and y coords of the camera. Assume difference in z coord is negligible
+    return cv::Point2f(tvec.at<double>(0), tvec.at<double>(1));
 }
 
+void visualiseCalibration(std::vector<cv::Point2f> points) {
+    int windowSize = 480;
+    int scaleFactor = 3;  // if you dont see the points on the window you might need to change the scale
+    cv::Mat image(windowSize, windowSize, CV_8UC1, 255);;
+
+    // Calculate the center of the cameras
+    cv::Point2f center(0, 0);
+    for (const cv::Point2f& point : points) {
+        center.x += point.x;
+        center.y += point.y;
+    }
+    center.x /= points.size();
+    center.y /= points.size();
+
+    for (const cv::Point2d& point : points) {
+        // move cameras to the center of the window
+        cv::Point2d relativePosition((point.x-center.x)*scaleFactor+windowSize/2, 
+                                     (point.y-center.y)*scaleFactor+windowSize/2);
+
+        // Round values
+        std::string roundedX = std::to_string(std::round((point.x - points[0].x) * 10.0) / 10.0);
+        std::string roundedY = std::to_string(std::round((point.y - points[0].y) * 10.0) / 10.0);
+        roundedX.erase(roundedX.find_last_not_of('0') + 1, std::string::npos);
+        roundedY.erase(roundedY.find_last_not_of('0') + 1, std::string::npos);
+        std::string text = "(" + roundedX + ", " + roundedY + ")";
+
+        // Draw points and labels
+        cv::circle(image, relativePosition, 5, 0, -1);
+        cv::putText(image, text, cv::Point(relativePosition.x, relativePosition.y - 10), cv::FONT_HERSHEY_SIMPLEX, 0.5, 0, 1);
+    }
+    cv::imshow("Calibration", image);
+    cv::waitKey(0);
+}
 
 int main(int argc, char *argv[])
 {
-    std::vector<cv::Mat> imagesBL = loadImages("C:/Users/HCIadmin/jet/Calibration/calibration-images/bl/bl_%d.jpg");
-    std::vector<cv::Mat> imagesBR = loadImages("C:/Users/HCIadmin/jet/Calibration/calibration-images/br/br_%d.jpg");
-    std::vector<cv::Mat> imagesTL = loadImages("C:/Users/HCIadmin/jet/Calibration/calibration-images/tl/tl_%d.jpg");
-    std::vector<cv::Mat> imagesTR = loadImages("C:/Users/HCIadmin/jet/Calibration/calibration-images/tr/tr_%d.jpg");
+    std::vector<cv::Mat> imagesBL = loadImages("./images/new-images2/bl/bl_%02d.jpg");
+    std::vector<cv::Mat> imagesBR = loadImages("./images/new-images2/br/br_%02d.jpg");
+    std::vector<cv::Mat> imagesTL = loadImages("./images/new-images2/tl/tl_%02d.jpg");
+    std::vector<cv::Mat> imagesTR = loadImages("./images/new-images2/tr/tr_%02d.jpg");
+    //std::vector<cv::Mat> imagesZR = loadImages("./images/new-images2/zedleft/zedleft_%02d.jpg");
+    //std::vector<cv::Mat> imagesZL = loadImages("./images/new-images2/zedright/zedright_%02d.jpg");
     std::cout << "loaded images" << std::endl;
 
-    std::vector<std::vector<cv::Mat>> allImages = { imagesBL, imagesBR, imagesTL, imagesTR };
+    std::vector<cv::Point2f> cameraLocations2D;
 
-    //calibrate(imagesBL);
-    //calibrateTwo(imagesBL, imagesTL);
-    //calibrateTwo(imagesBL, imagesTR);
+    const cv::Size imgSizeCam(1944, 2592);
+    const cv::Size imgSizeZed(2208, 1242);
 
-    calibrateMany(allImages);
+    cameraLocations2D.push_back(calibrate(imagesBL, imgSizeCam));
+    cameraLocations2D.push_back(calibrate(imagesBR, imgSizeCam));
+    cameraLocations2D.push_back(calibrate(imagesTL, imgSizeCam));
+    cameraLocations2D.push_back(calibrate(imagesTR, imgSizeCam));
+    //cameraLocations2D.push_back(calibrate(imagesZR, imgSizeZed));
+    //cameraLocations2D.push_back(calibrate(imagesZL, imgSizeZed));
+
+    visualiseCalibration(cameraLocations2D);
 
     return 0;
 }
