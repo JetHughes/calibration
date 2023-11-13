@@ -7,7 +7,7 @@ project(Calibration)
 find_package(OpenCV CONFIG REQUIRED)
 include_directories(${OpenCV_INCLUDE_DIRS})
 
-file(COPY new-images2 DESTINATION images)
+file(COPY images DESTINATION images)
 
 add_executable(calibration
     calibrate.cpp)

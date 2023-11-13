@@ -173,12 +173,12 @@ void visualiseCalibration(std::vector<cv::Point2f> points) {
 
 int main(int argc, char *argv[])
 {
-    std::vector<cv::Mat> imagesBL = loadImages("./images/new-images2/bl/bl_%02d.jpg");
-    std::vector<cv::Mat> imagesBR = loadImages("./images/new-images2/br/br_%02d.jpg");
-    std::vector<cv::Mat> imagesTL = loadImages("./images/new-images2/tl/tl_%02d.jpg");
-    std::vector<cv::Mat> imagesTR = loadImages("./images/new-images2/tr/tr_%02d.jpg");
-    //std::vector<cv::Mat> imagesZR = loadImages("./images/new-images2/zedleft/zedleft_%02d.jpg");
-    //std::vector<cv::Mat> imagesZL = loadImages("./images/new-images2/zedright/zedright_%02d.jpg");
+    std::vector<cv::Mat> imagesBL = loadImages("./images/images/bl/bl_%02d.jpg");
+    std::vector<cv::Mat> imagesBR = loadImages("./images/images/br/br_%02d.jpg");
+    std::vector<cv::Mat> imagesTL = loadImages("./images/images/tl/tl_%02d.jpg");
+    std::vector<cv::Mat> imagesTR = loadImages("./images/images/tr/tr_%02d.jpg");
+    //std::vector<cv::Mat> imagesZR = loadImages("./images/images/zedleft/zedleft_%02d.jpg");
+    //std::vector<cv::Mat> imagesZL = loadImages("./images/images/zedright/zedright_%02d.jpg");
     std::cout << "loaded images" << std::endl;
 
     std::vector<cv::Point2f> cameraLocations2D;
